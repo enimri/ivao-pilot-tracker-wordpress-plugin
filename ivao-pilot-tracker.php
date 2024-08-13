@@ -3,7 +3,7 @@
 Plugin Name: IVAO Pilot Tracker
 Description: Displays pilot departures and arrivals for OJAI, OSDI, and ORBI airports with estimated ETD and EET. Now with a Scrollable Table on Mobile.
 Version: 1.4
-Author: Your Name
+Author: Eyad Nimri
 */
 
 if (!defined('ABSPATH')) {
