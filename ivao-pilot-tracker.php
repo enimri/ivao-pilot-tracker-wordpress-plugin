@@ -1,8 +1,8 @@
 <?php
 /*
 Plugin Name: IVAO Pilot Tracker
-Description: Displays pilot departures and arrivals for OJAI, OSDI, and ORBI airports with estimated ETD and EET. Now with Responsive Web Design.
-Version: 1.3
+Description: Displays pilot departures and arrivals for OJAI, OSDI, and ORBI airports with estimated ETD and EET. Now with a Scrollable Table on Mobile.
+Version: 1.4
 Author: Your Name
 */
 
@@ -159,7 +159,7 @@ function render_ivao_pilot_tracker() {
 
     echo '</div>';
 
-    // Custom CSS for Responsive Design
+    // Custom CSS for Scrollable Table on Mobile
     echo '<style>
         .ivao-pilot-tracker table {
             width: 100%;
@@ -176,43 +176,16 @@ function render_ivao_pilot_tracker() {
             background-color: #f2f2f2;
         }
 
-        /* Responsive Table */
+        /* Scrollable Table for Mobile */
         .table-responsive {
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
-            display: block;
-            width: 100%;
         }
 
         /* Mobile Adjustments */
         @media screen and (max-width: 600px) {
-            .ivao-pilot-tracker table, .ivao-pilot-tracker thead, .ivao-pilot-tracker tbody, .ivao-pilot-tracker th, .ivao-pilot-tracker td, .ivao-pilot-tracker tr {
-                display: block;
-            }
-
-            .ivao-pilot-tracker tr {
-                margin-bottom: 15px;
-            }
-
-            .ivao-pilot-tracker td {
-                position: relative;
-                padding-left: 50%;
-                text-align: left;
-                border: none;
-                border-bottom: 1px solid #ddd;
-            }
-
-            .ivao-pilot-tracker td:before {
-                content: attr(data-label);
-                position: absolute;
-                left: 0;
-                width: 45%;
-                padding-left: 10px;
-                font-weight: bold;
-                text-align: left;
-                background-color: #f2f2f2;
-                border-right: 1px solid #ddd;
-                padding-right: 10px;
+            .ivao-pilot-tracker th, .ivao-pilot-tracker td {
+                font-size: 14px;
             }
         }
     </style>';
