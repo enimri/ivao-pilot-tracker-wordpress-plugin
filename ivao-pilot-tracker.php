@@ -1,8 +1,8 @@
 <?php
 /*
 Plugin Name: IVAO Pilot Tracker
-Description: Displays pilot departures and arrivals for selected airports with estimated ETD and EET. Includes backend management for adding, editing, and removing airports.
-Version: 1.5
+Description: Displays pilot departures and arrivals for selected airports with estimated ETD, EET, and ETA. Includes backend management for adding, editing, and removing airports.
+Version: 1.8
 Author: Eyad Nimri
 */
 
@@ -29,40 +29,63 @@ function ivao_pilot_tracker_create_db() {
 }
 register_activation_hook(__FILE__, 'ivao_pilot_tracker_create_db');
 
-// Function to estimate EET based on distance and average speed
-function estimate_eet($from, $to) {
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'ivao_airports';
+// Function to calculate distance between two coordinates
+function calculate_distance($lat1, $lon1, $lat2, $lon2) {
+    $earth_radius = 6371; // Radius of the Earth in kilometers
 
-    // Get coordinates for both departure and arrival airports
-    $from_coords = $wpdb->get_row($wpdb->prepare("SELECT latitude, longitude FROM $table_name WHERE icao_code = %s", $from), ARRAY_A);
-    $to_coords = $wpdb->get_row($wpdb->prepare("SELECT latitude, longitude FROM $table_name WHERE icao_code = %s", $to), ARRAY_A);
+    $dlat = deg2rad($lat2 - $lat1);
+    $dlon = deg2rad($lon2 - $lon1);
 
-    if (!$from_coords || !$to_coords) {
+    $a = sin($dlat / 2) * sin($dlat / 2) +
+         cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+         sin($dlon / 2) * sin($dlon / 2);
+
+    $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+    return $earth_radius * $c; // Distance in kilometers
+}
+
+// Function to format EET in HH:MM
+function format_eet($eet_seconds) {
+    $eet_seconds = (float)$eet_seconds;
+    if ($eet_seconds <= 0) {
         return 'N/A';
     }
 
-    $distance = calculate_distance($from_coords['latitude'], $from_coords['longitude'], $to_coords['latitude'], $to_coords['longitude']);
-    $average_speed = 450; // in knots
-    $eet_hours = $distance / $average_speed; // Estimated Elapsed Time in hours
+    // Ensure EET does not exceed 23 hours and 59 minutes
+    $eet_seconds = min($eet_seconds, 23 * 3600 + 59 * 60);
 
-    return gmdate('H:i', $eet_hours * 3600) . ' UTC'; // Return EET in HH:MM format
+    $hours = floor($eet_seconds / 3600);
+    $minutes = floor(($eet_seconds % 3600) / 60);
+    return sprintf('%02d:%02d', $hours, $minutes);
 }
 
-// Function to estimate ETD based on current time and EET
-function estimate_etd($eet) {
-    if ($eet === 'N/A') {
+// Function to format ETD in HH:MM UTC
+function format_etd($departure_time) {
+    $departure_time = (float)$departure_time;
+    if ($departure_time === null) {
         return 'N/A';
     }
 
-    $eet_seconds = strtotime($eet) - strtotime('TODAY');
-    $current_time = time();
-    $etd_time = $current_time - $eet_seconds; // Subtract EET (in seconds) from current time
-
-    return gmdate('H:i T', $etd_time); // Return ETD in HH:MM format
+    $hours = floor($departure_time / 3600);
+    $minutes = floor(($departure_time % 3600) / 60);
+    return sprintf('%02d:%02d UTC', $hours, $minutes);
 }
 
-// Function to fetch IVAO data and calculate EET/ETD
+// Function to calculate ETA based on ETD and EET
+function calculate_eta($etd_seconds, $eet_seconds) {
+    $etd_seconds = (float)$etd_seconds;
+    $eet_seconds = (float)$eet_seconds;
+
+    // Calculate ETA as the sum of ETD and EET
+    $eta_seconds = $etd_seconds + $eet_seconds;
+
+    $hours = floor($eta_seconds / 3600);
+    $minutes = floor(($eta_seconds % 3600) / 60);
+    return sprintf('%02d:%02d UTC', $hours, $minutes);
+}
+
+// Function to fetch IVAO data and calculate EET/ETD/ETA
 function fetch_ivao_data() {
     $response = wp_remote_get('https://api.ivao.aero/v2/tracker/whazzup');
     if (is_wp_error($response)) {
@@ -84,26 +107,41 @@ function fetch_ivao_data() {
     foreach ($data['clients']['pilots'] as $pilot) {
         $departureId = $pilot['flightPlan']['departureId'] ?? '';
         $arrivalId = $pilot['flightPlan']['arrivalId'] ?? '';
-        $eet = $pilot['flightPlan']['eet'] ?? null; // Fetch EET directly from API if available
-        $eet_formatted = $eet ? gmdate('H:i', $eet) . ' UTC' : 'N/A'; // Format EET if available
-        $etd = estimate_etd($eet_formatted);
+        $eet = $pilot['flightPlan']['eet'] ?? 0; // Fetch EET directly from API if available
+        $departureTime = $pilot['flightPlan']['departureTime'] ?? null; // Fetch departureTime directly from API if available
 
+        // Format departureTime
+        if ($departureTime !== null) {
+            $etd = format_etd($departureTime); // Format departureTime to HH:MM UTC
+            $etd_seconds = (float)$departureTime;
+        } else {
+            $etd = 'N/A';
+            $etd_seconds = 0;
+        }
+
+        // Calculate ETA if EET is available
+        $eta = $eet ? calculate_eta($etd_seconds, $eet) : 'N/A';
+
+        // Handle departure data
         if (in_array($departureId, $icao_codes)) {
             $result['departures'][] = [
                 'callsign' => $pilot['callsign'],
                 'from' => $departureId,
-                'etd' => $etd,  // Display ETD for departures
+                'etd' => $etd,  // Use ETD with UTC
                 'to' => $arrivalId,
+                'eta' => $eta,  // Add ETA
                 'last_track' => $pilot['lastTrack']['state'] ?? 'Unknown'
             ];
         }
 
+        // Handle arrival data
         if (in_array($arrivalId, $icao_codes)) {
             $result['arrivals'][] = [
                 'callsign' => $pilot['callsign'],
                 'to' => $arrivalId,
-                'eet' => $eet_formatted,  // Display EET for arrivals
+                'eet' => $eet ? format_eet($eet) : 'N/A',  // Format EET without UTC
                 'from' => $departureId,
+                'eta' => $eta,  // Add ETA
                 'last_track' => $pilot['lastTrack']['state'] ?? 'Unknown'
             ];
         }
@@ -124,42 +162,42 @@ function render_ivao_pilot_tracker() {
     // Departures section
     echo '<h3>Departures</h3>';
     echo '<div class="table-responsive"><table>';
-    echo '<tr><th>CALLSIGN</th><th>FROM</th><th>ETD</th><th>TO</th><th>LAST TRACK</th></tr>';
+    echo '<tr><th>CALLSIGN</th><th>FROM</th><th>ETD</th><th>ETA</th><th>TO</th><th>LAST TRACK</th></tr>';
     if (!empty($data['departures'])) {
         foreach ($data['departures'] as $departure) {
             echo '<tr>';
             echo '<td>' . esc_html($departure['callsign']) . '</td>';
             echo '<td>' . esc_html($departure['from']) . '</td>';
             echo '<td>' . esc_html($departure['etd']) . '</td>';
+            echo '<td>' . esc_html($departure['eta']) . '</td>';
             echo '<td>' . esc_html($departure['to']) . '</td>';
             echo '<td>' . esc_html($departure['last_track']) . '</td>';
             echo '</tr>';
         }
     } else {
-        echo '<tr><td colspan="5">No departures</td></tr>';
+        echo '<tr><td colspan="6">No departures</td></tr>';
     }
     echo '</table></div>';
 
     // Arrivals section
     echo '<h3>Arrivals</h3>';
     echo '<div class="table-responsive"><table>';
-    echo '<tr><th>CALLSIGN</th><th>TO</th><th>EET</th><th>FROM</th><th>LAST TRACK</th></tr>';
+    echo '<tr><th>CALLSIGN</th><th>TO</th><th>EET</th><th>ETA</th><th>FROM</th><th>LAST TRACK</th></tr>';
     if (!empty($data['arrivals'])) {
         foreach ($data['arrivals'] as $arrival) {
             echo '<tr>';
             echo '<td>' . esc_html($arrival['callsign']) . '</td>';
             echo '<td>' . esc_html($arrival['to']) . '</td>';
             echo '<td>' . esc_html($arrival['eet']) . '</td>';
+            echo '<td>' . esc_html($arrival['eta']) . '</td>';
             echo '<td>' . esc_html($arrival['from']) . '</td>';
             echo '<td>' . esc_html($arrival['last_track']) . '</td>';
             echo '</tr>';
         }
     } else {
-        echo '<tr><td colspan="5">No arrivals</td></tr>';
+        echo '<tr><td colspan="6">No arrivals</td></tr>';
     }
     echo '</table></div>';
-
-    echo '</div>';
 
     // Custom CSS for Scrollable Table on Mobile
     echo '<style>
@@ -169,150 +207,122 @@ function render_ivao_pilot_tracker() {
         }
 
         .ivao-pilot-tracker th, .ivao-pilot-tracker td {
+            border: 1px solid #ddd;
             padding: 8px;
             text-align: left;
-            border-bottom: 1px solid #ddd;
         }
 
         .ivao-pilot-tracker th {
-            background-color: #f2f2f2;
+            background-color: #f4f4f4;
         }
 
-        /* Scrollable Table for Mobile */
         .table-responsive {
             overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        /* Mobile Adjustments */
-        @media screen and (max-width: 600px) {
-            .ivao-pilot-tracker th, .ivao-pilot-tracker td {
-                font-size: 14px;
-            }
         }
     </style>';
 
-    return ob_get_clean(); // Return the content
+    echo '</div>';
+
+    return ob_get_clean(); // Return the output buffer contents
 }
 
-add_shortcode('ivao_pilot_tracker', 'render_ivao_pilot_tracker');
-
-// Enqueue admin scripts and styles
-function ivao_pilot_tracker_admin_scripts($hook) {
-    if ($hook != 'toplevel_page_ivao-pilot-tracker') {
-        return;
-    }
-    wp_enqueue_script('ivao-pilot-tracker-admin', plugin_dir_url(__FILE__) . 'admin.js', array('jquery'), '1.0', true);
+// Register shortcode for displaying pilot tracker
+function ivao_pilot_tracker_shortcode() {
+    return render_ivao_pilot_tracker();
 }
-add_action('admin_enqueue_scripts', 'ivao_pilot_tracker_admin_scripts');
+add_shortcode('ivao_pilot_tracker', 'ivao_pilot_tracker_shortcode');
 
-// Add admin menu
+// Function to add admin menu page
 function ivao_pilot_tracker_admin_menu() {
-    add_menu_page('IVAO Pilot Tracker', 'IVAO Pilot Tracker', 'manage_options', 'ivao-pilot-tracker', 'ivao_pilot_tracker_admin_page');
+    add_menu_page(
+        'IVAO Airport Tracker',
+        'IVAO Airport Tracker',
+        'manage_options',
+        'ivao-pilot-tracker',
+        'ivao_pilot_tracker_admin_page',
+        'dashicons-admin-generic'
+    );
 }
 add_action('admin_menu', 'ivao_pilot_tracker_admin_menu');
 
-// Admin page content
+// Admin page for managing airports
 function ivao_pilot_tracker_admin_page() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'ivao_airports';
+
+    // Handle form submission for adding/editing airports
+    if (isset($_POST['submit'])) {
+        $icao_code = sanitize_text_field($_POST['icao_code']);
+        $latitude = floatval($_POST['latitude']);
+        $longitude = floatval($_POST['longitude']);
+
+        if (!empty($icao_code) && $latitude && $longitude) {
+            $wpdb->replace(
+                $table_name,
+                [
+                    'icao_code' => $icao_code,
+                    'latitude' => $latitude,
+                    'longitude' => $longitude
+                ],
+                ['%s', '%f', '%f']
+            );
+            echo '<div class="updated"><p>Airport saved.</p></div>';
+        }
+    }
+
+    // Handle form submission for deleting airports
+    if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['icao_code'])) {
+        $icao_code = sanitize_text_field($_GET['icao_code']);
+        $wpdb->delete($table_name, ['icao_code' => $icao_code], ['%s']);
+        echo '<div class="updated"><p>Airport deleted.</p></div>';
+    }
+
+    // Display the form and list of airports
     ?>
     <div class="wrap">
-        <h1>IVAO Pilot Tracker</h1>
-        <form id="ivao-pilot-tracker-form">
+        <h1>Manage Airports</h1>
+        <form method="post">
             <table class="form-table">
-                <tr valign="top">
-                    <th scope="row">ICAO Code</th>
-                    <td><input type="text" id="icao-code" name="icao_code" required></td>
+                <tr>
+                    <th scope="row"><label for="icao_code">ICAO Code</label></th>
+                    <td><input name="icao_code" type="text" id="icao_code" value="" class="regular-text"></td>
                 </tr>
-                <tr valign="top">
-                    <th scope="row">Latitude</th>
-                    <td><input type="text" id="latitude" name="latitude" required></td>
+                <tr>
+                    <th scope="row"><label for="latitude">Latitude</label></th>
+                    <td><input name="latitude" type="text" id="latitude" value="" class="regular-text"></td>
                 </tr>
-                <tr valign="top">
-                    <th scope="row">Longitude</th>
-                    <td><input type="text" id="longitude" name="longitude" required></td>
+                <tr>
+                    <th scope="row"><label for="longitude">Longitude</label></th>
+                    <td><input name="longitude" type="text" id="longitude" value="" class="regular-text"></td>
                 </tr>
             </table>
-            <input type="submit" class="button button-primary" value="Add Airport">
+            <?php submit_button('Save Airport'); ?>
         </form>
 
-        <h2>Registered Airports</h2>
-        <table id="ivao-pilot-tracker-table" class="wp-list-table widefat fixed striped">
+        <h2>Airport List</h2>
+        <table class="wp-list-table widefat fixed striped">
             <thead>
                 <tr>
-                    <th>ICAO Code</th>
-                    <th>Latitude</th>
-                    <th>Longitude</th>
-                    <th>Actions</th>
+                    <th scope="col">ICAO Code</th>
+                    <th scope="col">Latitude</th>
+                    <th scope="col">Longitude</th>
+                    <th scope="col">Action</th>
                 </tr>
             </thead>
             <tbody>
-                <!-- Airports will be loaded here by JavaScript -->
+                <?php
+                $airports = $wpdb->get_results("SELECT * FROM $table_name", ARRAY_A);
+                foreach ($airports as $airport) {
+                    echo '<tr>';
+                    echo '<td>' . esc_html($airport['icao_code']) . '</td>';
+                    echo '<td>' . esc_html($airport['latitude']) . '</td>';
+                    echo '<td>' . esc_html($airport['longitude']) . '</td>';
+                    echo '<td><a href="' . esc_url(add_query_arg(['action' => 'delete', 'icao_code' => $airport['icao_code']])) . '">Delete</a></td>';
+                    echo '</tr>';
+                }
+                ?>
             </tbody>
         </table>
     </div>
     <?php
-}
-
-// Handle AJAX request to add an airport
-function ivao_pilot_tracker_add_airport() {
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'ivao_airports';
-
-    $icao_code = sanitize_text_field($_POST['icao_code']);
-    $latitude = floatval($_POST['latitude']);
-    $longitude = floatval($_POST['longitude']);
-
-    $wpdb->insert(
-        $table_name,
-        array(
-            'icao_code' => $icao_code,
-            'latitude' => $latitude,
-            'longitude' => $longitude
-        )
-    );
-
-    wp_send_json_success();
-}
-add_action('wp_ajax_ivao_pilot_tracker_add_airport', 'ivao_pilot_tracker_add_airport');
-
-// Handle AJAX request to delete an airport
-function ivao_pilot_tracker_delete_airport() {
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'ivao_airports';
-
-    $id = intval($_POST['id']);
-
-    $wpdb->delete($table_name, array('id' => $id));
-
-    wp_send_json_success();
-}
-add_action('wp_ajax_ivao_pilot_tracker_delete_airport', 'ivao_pilot_tracker_delete_airport');
-
-// Load airports for the admin table
-function ivao_pilot_tracker_load_airports() {
-    global $wpdb;
-    $table_name = $wpdb->prefix . 'ivao_airports';
-
-    $airports = $wpdb->get_results("SELECT * FROM $table_name");
-
-    wp_send_json_success($airports);
-}
-add_action('wp_ajax_ivao_pilot_tracker_load_airports', 'ivao_pilot_tracker_load_airports');
-
-// Utility function to calculate distance between two coordinates using the Haversine formula
-function calculate_distance($lat1, $lon1, $lat2, $lon2) {
-    $earth_radius = 3440; // Earth's radius in nautical miles
-
-    $lat1 = deg2rad($lat1);
-    $lon1 = deg2rad($lon1);
-    $lat2 = deg2rad($lat2);
-    $lon2 = deg2rad($lon2);
-
-    $lat_diff = $lat2 - $lat1;
-    $lon_diff = $lon2 - $lon1;
-
-    $a = sin($lat_diff / 2) * sin($lat_diff / 2) + cos($lat1) * cos($lat2) * sin($lon_diff / 2) * sin($lon_diff / 2);
-    $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
-
-    return $earth_radius * $c;
 }
