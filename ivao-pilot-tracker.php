@@ -2,7 +2,7 @@
 /*
 Plugin Name: IVAO Pilot Tracker
 Description: Displays pilot departures and arrivals for selected airports with estimated ETD, EET, and ETA. Includes backend management for adding, editing, and removing airports.
-Version: 1.17
+Version: 1.19
 Author: Eyad Nimri
 */
 
@@ -106,11 +106,13 @@ function fetch_ivao_data() {
 
         if (in_array($arrivalId, $icao_codes)) {
             $result['arrivals'][] = [
+                'callsign' => $pilot['callsign'],
                 'to' => $arrivalId,
                 'from' => $departureId,
                 'etd' => $etd,
                 'eet' => $eet,
-                'eta' => $eta
+                'eta' => $eta,
+                'last_track' => $pilot['lastTrack']['state'] ?? 'Unknown'
             ];
         }
     }
@@ -151,19 +153,21 @@ function render_ivao_pilot_tracker() {
     // Arrivals section
     echo '<h3>Arrivals</h3>';
     echo '<div class="table-responsive"><table>';
-    echo '<tr><th>TO</th><th>FROM</th><th>ETD</th><th>EET</th><th>ETA</th></tr>';
+    echo '<tr><th>CALLSIGN</th><th>TO</th><th>FROM</th><th>ETD</th><th>EET</th><th>ETA</th><th>LAST TRACK</th></tr>';
     if (!empty($data['arrivals'])) {
         foreach ($data['arrivals'] as $arrival) {
             echo '<tr>';
+            echo '<td>' . esc_html($arrival['callsign']) . '</td>';
             echo '<td>' . esc_html($arrival['to']) . '</td>';
             echo '<td>' . esc_html($arrival['from']) . '</td>';
             echo '<td>' . esc_html($arrival['etd']) . '</td>';
             echo '<td>' . esc_html($arrival['eet']) . '</td>';
             echo '<td>' . esc_html($arrival['eta']) . '</td>';
+            echo '<td>' . esc_html($arrival['last_track']) . '</td>';
             echo '</tr>';
         }
     } else {
-        echo '<tr><td colspan="5">No arrivals</td></tr>';
+        echo '<tr><td colspan="7">No arrivals</td></tr>';
     }
     echo '</table></div>';
 
