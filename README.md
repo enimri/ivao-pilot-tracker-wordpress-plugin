@@ -28,7 +28,7 @@ You can manage airports via the IVAO Pilot Tracker admin page under the WordPres
 
 ## Shortcode
 
-Use the shortcode `[ivao_pilot_tracker]` to display the pilot departures and arrivals on any post or page.
+Use the shortcode `[ivao_airport_tracker]` to display the pilot departures and arrivals on any post or page.
 
 ## Changelog
 
