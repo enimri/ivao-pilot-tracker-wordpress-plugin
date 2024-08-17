@@ -52,7 +52,6 @@ function format_eet($eet_seconds) {
         return 'N/A';
     }
 
-    // Ensure EET does not exceed 23 hours and 59 minutes
     $eet_seconds = min($eet_seconds, 23 * 3600 + 59 * 60);
 
     $hours = floor($eet_seconds / 3600);
@@ -77,7 +76,6 @@ function calculate_eta($etd_seconds, $eet_seconds) {
     $etd_seconds = (float)$etd_seconds;
     $eet_seconds = (float)$eet_seconds;
 
-    // Calculate ETA as the sum of ETD and EET
     $eta_seconds = $etd_seconds + $eet_seconds;
 
     $hours = floor($eta_seconds / 3600);
@@ -107,41 +105,37 @@ function fetch_ivao_data() {
     foreach ($data['clients']['pilots'] as $pilot) {
         $departureId = $pilot['flightPlan']['departureId'] ?? '';
         $arrivalId = $pilot['flightPlan']['arrivalId'] ?? '';
-        $eet = $pilot['flightPlan']['eet'] ?? 0; // Fetch EET directly from API if available
-        $departureTime = $pilot['flightPlan']['departureTime'] ?? null; // Fetch departureTime directly from API if available
+        $eet = $pilot['flightPlan']['eet'] ?? 0;
+        $departureTime = $pilot['flightPlan']['departureTime'] ?? null;
 
-        // Format departureTime
         if ($departureTime !== null) {
-            $etd = format_etd($departureTime); // Format departureTime to HH:MM UTC
+            $etd = format_etd($departureTime);
             $etd_seconds = (float)$departureTime;
         } else {
             $etd = 'N/A';
             $etd_seconds = 0;
         }
 
-        // Calculate ETA if EET is available
         $eta = $eet ? calculate_eta($etd_seconds, $eet) : 'N/A';
 
-        // Handle departure data
         if (in_array($departureId, $icao_codes)) {
             $result['departures'][] = [
                 'callsign' => $pilot['callsign'],
                 'from' => $departureId,
-                'etd' => $etd,  // Use ETD with UTC
+                'etd' => $etd,
                 'to' => $arrivalId,
-                'eta' => $eta,  // Add ETA
+                'eta' => $eta,
                 'last_track' => $pilot['lastTrack']['state'] ?? 'Unknown'
             ];
         }
 
-        // Handle arrival data
         if (in_array($arrivalId, $icao_codes)) {
             $result['arrivals'][] = [
                 'callsign' => $pilot['callsign'],
                 'to' => $arrivalId,
-                'eet' => $eet ? format_eet($eet) : 'N/A',  // Format EET without UTC
+                'eet' => $eet ? format_eet($eet) : 'N/A',
                 'from' => $departureId,
-                'eta' => $eta,  // Add ETA
+                'eta' => $eta,
                 'last_track' => $pilot['lastTrack']['state'] ?? 'Unknown'
             ];
         }
@@ -154,12 +148,11 @@ function fetch_ivao_data() {
 function render_ivao_pilot_tracker() {
     $data = fetch_ivao_data();
 
-    ob_start(); // Start output buffering
+    ob_start();
 
     echo '<h2>PILOTS</h2>';
     echo '<div class="ivao-pilot-tracker">';
 
-    // Departures section
     echo '<h3>Departures</h3>';
     echo '<div class="table-responsive"><table>';
     echo '<tr><th>CALLSIGN</th><th>FROM</th><th>ETD</th><th>ETA</th><th>TO</th><th>LAST TRACK</th></tr>';
@@ -179,7 +172,6 @@ function render_ivao_pilot_tracker() {
     }
     echo '</table></div>';
 
-    // Arrivals section
     echo '<h3>Arrivals</h3>';
     echo '<div class="table-responsive"><table>';
     echo '<tr><th>CALLSIGN</th><th>TO</th><th>EET</th><th>ETA</th><th>FROM</th><th>LAST TRACK</th></tr>';
@@ -199,7 +191,6 @@ function render_ivao_pilot_tracker() {
     }
     echo '</table></div>';
 
-    // Custom CSS for Scrollable Table on Mobile
     echo '<style>
         .ivao-pilot-tracker table {
             width: 100%;
@@ -213,114 +204,176 @@ function render_ivao_pilot_tracker() {
         }
 
         .ivao-pilot-tracker th {
-            background-color: #f4f4f4;
+            background-color: #f2f2f2;
         }
 
-        .table-responsive {
+        .ivao-pilot-tracker .table-responsive {
             overflow-x: auto;
         }
     </style>';
 
     echo '</div>';
 
-    return ob_get_clean(); // Return the output buffer contents
+    return ob_get_clean();
 }
+add_shortcode('ivao_airport_tracker', 'render_ivao_pilot_tracker');
 
-// Register shortcode for displaying pilot tracker
-function ivao_pilot_tracker_shortcode() {
-    return render_ivao_pilot_tracker();
-}
-add_shortcode('ivao_pilot_tracker', 'ivao_pilot_tracker_shortcode');
-
-// Function to add admin menu page
+// Add menu item for plugin settings
 function ivao_pilot_tracker_admin_menu() {
     add_menu_page(
-        'IVAO Airport Tracker',
-        'IVAO Airport Tracker',
+        'IVAO Pilot Tracker',
+        'IVAO Pilot Tracker',
         'manage_options',
         'ivao-pilot-tracker',
-        'ivao_pilot_tracker_admin_page',
-        'dashicons-admin-generic'
+        'ivao_pilot_tracker_settings_page',
+        'dashicons-admin-generic',
+        20
     );
 }
 add_action('admin_menu', 'ivao_pilot_tracker_admin_menu');
 
-// Admin page for managing airports
-function ivao_pilot_tracker_admin_page() {
+// Display the settings page content
+function ivao_pilot_tracker_settings_page() {
     global $wpdb;
     $table_name = $wpdb->prefix . 'ivao_airports';
 
-    // Handle form submission for adding/editing airports
-    if (isset($_POST['submit'])) {
-        $icao_code = sanitize_text_field($_POST['icao_code']);
-        $latitude = floatval($_POST['latitude']);
-        $longitude = floatval($_POST['longitude']);
-
-        if (!empty($icao_code) && $latitude && $longitude) {
-            $wpdb->replace(
-                $table_name,
-                [
-                    'icao_code' => $icao_code,
-                    'latitude' => $latitude,
-                    'longitude' => $longitude
-                ],
-                ['%s', '%f', '%f']
-            );
-            echo '<div class="updated"><p>Airport saved.</p></div>';
+    // Handle form submissions for adding/editing airports
+    if (isset($_POST['action']) && check_admin_referer('ivao_pilot_tracker_action', 'ivao_pilot_tracker_nonce')) {
+        if ($_POST['action'] == 'add') {
+            $icao_code = sanitize_text_field($_POST['icao_code']);
+            $latitude = floatval($_POST['latitude']);
+            $longitude = floatval($_POST['longitude']);
+            $wpdb->insert($table_name, ['icao_code' => $icao_code, 'latitude' => $latitude, 'longitude' => $longitude]);
+        } elseif ($_POST['action'] == 'edit') {
+            $id = intval($_POST['id']);
+            $icao_code = sanitize_text_field($_POST['icao_code']);
+            $latitude = floatval($_POST['latitude']);
+            $longitude = floatval($_POST['longitude']);
+            $wpdb->update($table_name, ['icao_code' => $icao_code, 'latitude' => $latitude, 'longitude' => $longitude], ['id' => $id]);
+        } elseif ($_POST['action'] == 'delete') {
+            $id = intval($_POST['id']);
+            $wpdb->delete($table_name, ['id' => $id]);
         }
     }
 
-    // Handle form submission for deleting airports
-    if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['icao_code'])) {
-        $icao_code = sanitize_text_field($_GET['icao_code']);
-        $wpdb->delete($table_name, ['icao_code' => $icao_code], ['%s']);
-        echo '<div class="updated"><p>Airport deleted.</p></div>';
-    }
+    // Fetch all airports
+    $airports = $wpdb->get_results("SELECT * FROM $table_name");
 
-    // Display the form and list of airports
     ?>
     <div class="wrap">
-        <h1>Manage Airports</h1>
-        <form method="post">
+        <h1>IVAO Pilot Tracker - Manage Airports</h1>
+
+        <!-- Add/Edit Airport Form -->
+        <form method="post" action="">
+            <?php wp_nonce_field('ivao_pilot_tracker_action', 'ivao_pilot_tracker_nonce'); ?>
+            <h2>Add/Edit Airport</h2>
             <table class="form-table">
-                <tr>
+                <tr valign="top">
                     <th scope="row"><label for="icao_code">ICAO Code</label></th>
-                    <td><input name="icao_code" type="text" id="icao_code" value="" class="regular-text"></td>
+                    <td><input type="text" id="icao_code" name="icao_code" value="" required /></td>
                 </tr>
-                <tr>
+                <tr valign="top">
                     <th scope="row"><label for="latitude">Latitude</label></th>
-                    <td><input name="latitude" type="text" id="latitude" value="" class="regular-text"></td>
+                    <td><input type="number" id="latitude" name="latitude" step="0.000001" value="" required /></td>
                 </tr>
-                <tr>
+                <tr valign="top">
                     <th scope="row"><label for="longitude">Longitude</label></th>
-                    <td><input name="longitude" type="text" id="longitude" value="" class="regular-text"></td>
+                    <td><input type="number" id="longitude" name="longitude" step="0.000001" value="" required /></td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row"></th>
+                    <td>
+                        <input type="hidden" name="action" value="add" />
+                        <input type="submit" class="button-primary" value="Add Airport" />
+                    </td>
                 </tr>
             </table>
-            <?php submit_button('Save Airport'); ?>
         </form>
 
+        <!-- Edit Airport Form -->
+        <form method="post" action="">
+            <?php wp_nonce_field('ivao_pilot_tracker_action', 'ivao_pilot_tracker_nonce'); ?>
+            <h2>Edit Airport</h2>
+            <table class="form-table">
+                <tr valign="top">
+                    <th scope="row"><label for="airport_id">Airport ID</label></th>
+                    <td>
+                        <select id="airport_id" name="id" required>
+                            <option value="">Select an airport</option>
+                            <?php foreach ($airports as $airport): ?>
+                                <option value="<?php echo esc_attr($airport->id); ?>"><?php echo esc_html($airport->icao_code); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row"><label for="edit_icao_code">ICAO Code</label></th>
+                    <td><input type="text" id="edit_icao_code" name="icao_code" value="" required /></td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row"><label for="edit_latitude">Latitude</label></th>
+                    <td><input type="number" id="edit_latitude" name="latitude" step="0.000001" value="" required /></td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row"><label for="edit_longitude">Longitude</label></th>
+                    <td><input type="number" id="edit_longitude" name="longitude" step="0.000001" value="" required /></td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row"></th>
+                    <td>
+                        <input type="hidden" name="action" value="edit" />
+                        <input type="submit" class="button-primary" value="Update Airport" />
+                    </td>
+                </tr>
+            </table>
+        </form>
+
+        <!-- Delete Airport -->
+        <form method="post" action="">
+            <?php wp_nonce_field('ivao_pilot_tracker_action', 'ivao_pilot_tracker_nonce'); ?>
+            <h2>Remove Airport</h2>
+            <table class="form-table">
+                <tr valign="top">
+                    <th scope="row"><label for="remove_airport_id">Airport ID</label></th>
+                    <td>
+                        <select id="remove_airport_id" name="id" required>
+                            <option value="">Select an airport</option>
+                            <?php foreach ($airports as $airport): ?>
+                                <option value="<?php echo esc_attr($airport->id); ?>"><?php echo esc_html($airport->icao_code); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row"></th>
+                    <td>
+                        <input type="hidden" name="action" value="delete" />
+                        <input type="submit" class="button-primary" value="Remove Airport" />
+                    </td>
+                </tr>
+            </table>
+        </form>
+
+        <!-- Display list of airports -->
         <h2>Airport List</h2>
         <table class="wp-list-table widefat fixed striped">
             <thead>
                 <tr>
-                    <th scope="col">ICAO Code</th>
-                    <th scope="col">Latitude</th>
-                    <th scope="col">Longitude</th>
-                    <th scope="col">Action</th>
+                    <th>ID</th>
+                    <th>ICAO Code</th>
+                    <th>Latitude</th>
+                    <th>Longitude</th>
                 </tr>
             </thead>
             <tbody>
-                <?php
-                $airports = $wpdb->get_results("SELECT * FROM $table_name", ARRAY_A);
-                foreach ($airports as $airport) {
-                    echo '<tr>';
-                    echo '<td>' . esc_html($airport['icao_code']) . '</td>';
-                    echo '<td>' . esc_html($airport['latitude']) . '</td>';
-                    echo '<td>' . esc_html($airport['longitude']) . '</td>';
-                    echo '<td><a href="' . esc_url(add_query_arg(['action' => 'delete', 'icao_code' => $airport['icao_code']])) . '">Delete</a></td>';
-                    echo '</tr>';
-                }
-                ?>
+                <?php foreach ($airports as $airport): ?>
+                    <tr>
+                        <td><?php echo esc_html($airport->id); ?></td>
+                        <td><?php echo esc_html($airport->icao_code); ?></td>
+                        <td><?php echo esc_html($airport->latitude); ?></td>
+                        <td><?php echo esc_html($airport->longitude); ?></td>
+                    </tr>
+                <?php endforeach; ?>
             </tbody>
         </table>
     </div>

@@ -1,64 +1,88 @@
 jQuery(document).ready(function($) {
-    // Load airports when the admin page is loaded
-    loadAirports();
+    // Add new airport
+    $('#add-airport-button').click(function(e) {
+        e.preventDefault();
+        
+        var icaoCode = $('#icao-code').val();
+        var latitude = $('#latitude').val();
+        var longitude = $('#longitude').val();
 
-    // Handle form submission for adding airports
-    $('#ivao-pilot-tracker-form').on('submit', function(event) {
-        event.preventDefault();
+        if (icaoCode === '' || latitude === '' || longitude === '') {
+            alert('Please fill in all fields.');
+            return;
+        }
 
         var data = {
-            action: 'ivao_pilot_tracker_add_airport',
-            icao_code: $('#icao-code').val(),
-            latitude: $('#latitude').val(),
-            longitude: $('#longitude').val()
+            action: 'ivao_add_airport',
+            icao_code: icaoCode,
+            latitude: latitude,
+            longitude: longitude
         };
 
-        $.post(ajaxurl, data, function(response) {
+        $.post(ivaoAdmin.ajax_url, data, function(response) {
             if (response.success) {
-                loadAirports();
-                $('#ivao-pilot-tracker-form')[0].reset();
+                alert('Airport added successfully.');
+                location.reload();
+            } else {
+                alert('Error adding airport.');
             }
         });
     });
 
-    // Handle deleting airports
-    $(document).on('click', '.delete-airport', function() {
-        var id = $(this).data('id');
+    // Remove airport
+    $('.remove-airport-button').click(function(e) {
+        e.preventDefault();
+
+        if (!confirm('Are you sure you want to remove this airport?')) {
+            return;
+        }
+
+        var airportId = $(this).data('id');
 
         var data = {
-            action: 'ivao_pilot_tracker_delete_airport',
-            id: id
+            action: 'ivao_remove_airport',
+            id: airportId
         };
 
-        $.post(ajaxurl, data, function(response) {
+        $.post(ivaoAdmin.ajax_url, data, function(response) {
             if (response.success) {
-                loadAirports();
+                alert('Airport removed successfully.');
+                location.reload();
+            } else {
+                alert('Error removing airport.');
             }
         });
     });
 
-    // Function to load airports from the database and display them in the table
-    function loadAirports() {
+    // Edit airport
+    $('#edit-airport-button').click(function(e) {
+        e.preventDefault();
+
+        var airportId = $('#airport-id').val();
+        var icaoCode = $('#edit-icao-code').val();
+        var latitude = $('#edit-latitude').val();
+        var longitude = $('#edit-longitude').val();
+
+        if (icaoCode === '' || latitude === '' || longitude === '') {
+            alert('Please fill in all fields.');
+            return;
+        }
+
         var data = {
-            action: 'ivao_pilot_tracker_load_airports'
+            action: 'ivao_edit_airport',
+            id: airportId,
+            icao_code: icaoCode,
+            latitude: latitude,
+            longitude: longitude
         };
 
-        $.post(ajaxurl, data, function(response) {
+        $.post(ivaoAdmin.ajax_url, data, function(response) {
             if (response.success) {
-                var airports = response.data;
-                var rows = '';
-
-                $.each(airports, function(index, airport) {
-                    rows += '<tr>';
-                    rows += '<td>' + airport.icao_code + '</td>';
-                    rows += '<td>' + airport.latitude + '</td>';
-                    rows += '<td>' + airport.longitude + '</td>';
-                    rows += '<td><button class="button delete-airport" data-id="' + airport.id + '">Delete</button></td>';
-                    rows += '</tr>';
-                });
-
-                $('#ivao-pilot-tracker-table tbody').html(rows);
+                alert('Airport updated successfully.');
+                location.reload();
+            } else {
+                alert('Error updating airport.');
             }
         });
-    }
+    });
 });
