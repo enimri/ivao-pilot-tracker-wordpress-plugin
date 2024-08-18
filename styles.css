@@ -1,0 +1,68 @@
+/* Base styles for the plugin */
+.ivao-pilot-tracker {
+    font-family: Arial, sans-serif;
+    margin: 20px 0;
+}
+
+.ivao-pilot-tracker h2, .ivao-pilot-tracker h3 {
+    color: #333;
+}
+
+.ivao-pilot-tracker table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+.ivao-pilot-tracker th, .ivao-pilot-tracker td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+.ivao-pilot-tracker th {
+    background-color: #f4f4f4;
+    font-weight: bold;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    /* Adjust table layout for smaller screens */
+    .ivao-pilot-tracker table {
+        display: block;
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .ivao-pilot-tracker th, .ivao-pilot-tracker td {
+        white-space: nowrap;
+    }
+
+    .ivao-pilot-tracker th, .ivao-pilot-tracker td {
+        padding: 10px;
+    }
+
+    /* Ensure the headings don't overflow */
+    .ivao-pilot-tracker h2, .ivao-pilot-tracker h3 {
+        font-size: 1.5em;
+        margin-bottom: 10px;
+    }
+
+    /* Make buttons and form inputs full-width */
+    .ivao-pilot-tracker form .regular-text,
+    .ivao-pilot-tracker form input[type="submit"] {
+        width: 100%;
+        box-sizing: border-box;
+    }
+}
+
+/* Extra small screens (phones) */
+@media (max-width: 480px) {
+    .ivao-pilot-tracker th, .ivao-pilot-tracker td {
+        font-size: 14px;
+    }
+
+    .ivao-pilot-tracker h2, .ivao-pilot-tracker h3 {
+        font-size: 1.2em;
+    }
+}
