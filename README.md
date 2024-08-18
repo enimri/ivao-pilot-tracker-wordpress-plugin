@@ -1,36 +1,59 @@
 # IVAO Pilot Tracker
 
+**Version:** 1.20  
+**Author:** Eyad Nimri
+
 ## Description
 
-This plugin displays pilot departures and arrivals for selected airports with estimated ETD (Estimated Time of Departure) and EET (Estimated Elapsed Time). It also includes a backend management interface for adding, editing, and removing airports.
+IVAO Pilot Tracker is a WordPress plugin that displays real-time pilot departures and arrivals for selected airports. It shows estimated ETD (Estimated Time of Departure), EET (Estimated Elapsed Time), and ETA (Estimated Time of Arrival). The plugin also includes a backend management interface for adding, editing, and removing airports.
+
+## Features
+
+- **Real-time Data:** Displays pilot departures and arrivals with estimated times.
+- **Backend Management:** Easily add, edit, or remove airports through the WordPress admin panel.
+- **Automatic Refresh:** Data is refreshed every 3 seconds to ensure you have the most up-to-date information.
 
 ## Installation
 
-1. Download the plugin and unzip it.
-2. Upload the `ivao-pilot-tracker` folder to the `/wp-content/plugins/` directory.
-3. Activate the plugin through the 'Plugins' menu in WordPress.
-4. Use the shortcode `[ivao_airport_tracker]` to display the pilot tracker on any page or post.
+1. **Download and Install:**
+   - Download the plugin ZIP file from your source.
+   - Go to your WordPress admin dashboard.
+   - Navigate to **Plugins** > **Add New** > **Upload Plugin**.
+   - Choose the ZIP file and click **Install Now**.
+   - Activate the plugin from the **Plugins** menu.
 
-## Admin Interface
+2. **Add the Shortcode:**
+   - Create a new page or edit an existing page.
+   - Insert the shortcode `[ivao_pilot_tracker]` into the content area.
+   - Publish or update the page.
 
-You can manage airports via the IVAO Pilot Tracker admin page under the WordPress Dashboard.
+## Configuration
 
-### Adding an Airport
+1. **Database Setup:**
+   - The plugin creates a custom database table to store airport information upon activation.
 
-1. Go to the IVAO Pilot Tracker admin page.
-2. Enter the ICAO code, latitude, and longitude for the airport.
-3. Click "Add Airport" to save it to the database.
+2. **Manage Airports:**
+   - Go to **IVAO Pilot Tracker** in the WordPress admin menu.
+   - Use the settings page to add new airports or delete existing ones.
 
-### Deleting an Airport
+## Frontend Display
 
-1. Go to the IVAO Pilot Tracker admin page.
-2. Click the "Delete" button next to the airport you want to remove.
+- **Departures Table:** Lists all pilots currently departing from the airports you have added, including callsign, departure and arrival airports, ETD, EET, ETA, and last track information.
+- **Arrivals Table:** Lists all pilots currently arriving at the airports you have added, with the same information as above.
 
-## Shortcode
+## Customization
 
-Use the shortcode `[ivao_airport_tracker]` to display the pilot departures and arrivals on any post or page.
+- **Styles:** You can customize the appearance of the tables by modifying the `styles.css` file located in the plugin directory.
+- **JavaScript Refresh:** The data refresh interval is set to 3 seconds in `refresh.js`. You can adjust this as needed.
+
+## Troubleshooting
+
+- **Design Issues:** Ensure that the `styles.css` file is correctly enqueued and not overridden by other styles.
+- **JavaScript Errors:** Check browser developer tools for any JavaScript errors and ensure the AJAX request URL is correct.
 
 ## Changelog
 
-### Version 1.5
-- Initial release with selected airport filtering and estimated ETD/EET display.
+**1.20**
+- Added AJAX handler to refresh data every 3 seconds.
+- Improved the design to maintain consistency with the original layout.
+
