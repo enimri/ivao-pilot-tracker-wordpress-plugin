@@ -2,7 +2,7 @@
 /*
 Plugin Name: IVAO Pilot Tracker
 Description: Displays pilot departures and arrivals for selected airports with estimated ETD, EET, and ETA. Includes backend management for adding, editing, and removing airports.
-Version: 1.20
+Version: 1.19
 Author: Eyad Nimri
 */
 
@@ -71,14 +71,12 @@ function fetch_ivao_data() {
     $body = wp_remote_retrieve_body($response);
     $data = json_decode($body, true);
 
-    $result = ['departures' => '', 'arrivals' => ''];
+    $result = ['departures' => [], 'arrivals' => []];
 
     global $wpdb;
     $table_name = $wpdb->prefix . 'ivao_airports';
     $icao_codes = $wpdb->get_col("SELECT icao_code FROM $table_name");
 
-    ob_start(); // Start output buffering for departures
-    echo '<tr><th>CALLSIGN</th><th>FROM</th><th>TO</th><th>ETD</th><th>EET</th><th>ETA</th><th>LAST TRACK</th></tr>';
     foreach ($data['clients']['pilots'] as $pilot) {
         $departureId = $pilot['flightPlan']['departureId'] ?? '';
         $arrivalId = $pilot['flightPlan']['arrivalId'] ?? '';
@@ -88,66 +86,44 @@ function fetch_ivao_data() {
         $groundSpeed = $pilot['lastTrack']['groundSpeed'] ?? 0;
         $lastTrackTimestamp = $pilot['lastTrack']['timestamp'] ?? null;
 
+        // Fetch EET directly from API response if available
         $eet = isset($pilot['flightPlan']['eet']) ? gmdate('H:i', $pilot['flightPlan']['eet']) . ' UTC' : 'N/A';
+
         $etd = calculate_etd($departureTime);
         $eta = calculate_eta($arrivalDistance, $groundSpeed, $lastTrackTimestamp);
 
         if (in_array($departureId, $icao_codes)) {
-            echo '<tr>';
-            echo '<td>' . esc_html($pilot['callsign']) . '</td>';
-            echo '<td>' . esc_html($departureId) . '</td>';
-            echo '<td>' . esc_html($arrivalId) . '</td>';
-            echo '<td>' . esc_html($etd) . '</td>';
-            echo '<td>' . esc_html($eet) . '</td>';
-            echo '<td>' . esc_html($eta) . '</td>';
-            echo '<td>' . esc_html($pilot['lastTrack']['state'] ?? 'Unknown') . '</td>';
-            echo '</tr>';
+            $result['departures'][] = [
+                'callsign' => $pilot['callsign'],
+                'from' => $departureId,
+                'to' => $arrivalId,
+                'etd' => $etd,
+                'eet' => $eet,
+                'eta' => $eta,
+                'last_track' => $pilot['lastTrack']['state'] ?? 'Unknown'
+            ];
         }
-    }
-    $result['departures'] = ob_get_clean(); // End buffering for departures
-
-    ob_start(); // Start output buffering for arrivals
-    echo '<tr><th>CALLSIGN</th><th>TO</th><th>FROM</th><th>ETD</th><th>EET</th><th>ETA</th><th>LAST TRACK</th></tr>';
-    foreach ($data['clients']['pilots'] as $pilot) {
-        $departureId = $pilot['flightPlan']['departureId'] ?? '';
-        $arrivalId = $pilot['flightPlan']['arrivalId'] ?? '';
-        $departureTime = $pilot['flightPlan']['departureTime'] ?? null;
-        $arrivalTime = $pilot['flightPlan']['arrivalTime'] ?? null;
-        $arrivalDistance = $pilot['lastTrack']['arrivalDistance'] ?? 0;
-        $groundSpeed = $pilot['lastTrack']['groundSpeed'] ?? 0;
-        $lastTrackTimestamp = $pilot['lastTrack']['timestamp'] ?? null;
-
-        $eet = isset($pilot['flightPlan']['eet']) ? gmdate('H:i', $pilot['flightPlan']['eet']) . ' UTC' : 'N/A';
-        $etd = calculate_etd($departureTime);
-        $eta = calculate_eta($arrivalDistance, $groundSpeed, $lastTrackTimestamp);
 
         if (in_array($arrivalId, $icao_codes)) {
-            echo '<tr>';
-            echo '<td>' . esc_html($pilot['callsign']) . '</td>';
-            echo '<td>' . esc_html($arrivalId) . '</td>';
-            echo '<td>' . esc_html($departureId) . '</td>';
-            echo '<td>' . esc_html($etd) . '</td>';
-            echo '<td>' . esc_html($eet) . '</td>';
-            echo '<td>' . esc_html($eta) . '</td>';
-            echo '<td>' . esc_html($pilot['lastTrack']['state'] ?? 'Unknown') . '</td>';
-            echo '</tr>';
+            $result['arrivals'][] = [
+                'callsign' => $pilot['callsign'],
+                'to' => $arrivalId,
+                'from' => $departureId,
+                'etd' => $etd,
+                'eet' => $eet,
+                'eta' => $eta,
+                'last_track' => $pilot['lastTrack']['state'] ?? 'Unknown'
+            ];
         }
     }
-    $result['arrivals'] = ob_get_clean(); // End buffering for arrivals
 
     return $result;
 }
 
-// AJAX handler to fetch IVAO data
-function ivao_pilot_tracker_ajax_handler() {
-    $data = fetch_ivao_data();
-    wp_send_json($data);
-}
-add_action('wp_ajax_fetch_ivao_pilot_data', 'ivao_pilot_tracker_ajax_handler');
-add_action('wp_ajax_nopriv_fetch_ivao_pilot_data', 'ivao_pilot_tracker_ajax_handler');
-
 // Shortcode function to render the plugin output
 function render_ivao_pilot_tracker() {
+    $data = fetch_ivao_data();
+
     ob_start(); // Start output buffering
 
     echo '<h2>PILOTS</h2>';
@@ -155,19 +131,51 @@ function render_ivao_pilot_tracker() {
 
     // Departures section
     echo '<h3>Departures</h3>';
-    echo '<div class="table-responsive"><table id="departures-table">';
+    echo '<div class="table-responsive"><table>';
+    echo '<tr><th>CALLSIGN</th><th>FROM</th><th>TO</th><th>ETD</th><th>EET</th><th>ETA</th><th>LAST TRACK</th></tr>';
+    if (!empty($data['departures'])) {
+        foreach ($data['departures'] as $departure) {
+            echo '<tr>';
+            echo '<td>' . esc_html($departure['callsign']) . '</td>';
+            echo '<td>' . esc_html($departure['from']) . '</td>';
+            echo '<td>' . esc_html($departure['to']) . '</td>';
+            echo '<td>' . esc_html($departure['etd']) . '</td>';
+            echo '<td>' . esc_html($departure['eet']) . '</td>';
+            echo '<td>' . esc_html($departure['eta']) . '</td>';
+            echo '<td>' . esc_html($departure['last_track']) . '</td>';
+            echo '</tr>';
+        }
+    } else {
+        echo '<tr><td colspan="7">No departures</td></tr>';
+    }
     echo '</table></div>';
 
     // Arrivals section
     echo '<h3>Arrivals</h3>';
-    echo '<div class="table-responsive"><table id="arrivals-table">';
+    echo '<div class="table-responsive"><table>';
+    echo '<tr><th>CALLSIGN</th><th>TO</th><th>FROM</th><th>ETD</th><th>EET</th><th>ETA</th><th>LAST TRACK</th></tr>';
+    if (!empty($data['arrivals'])) {
+        foreach ($data['arrivals'] as $arrival) {
+            echo '<tr>';
+            echo '<td>' . esc_html($arrival['callsign']) . '</td>';
+            echo '<td>' . esc_html($arrival['to']) . '</td>';
+            echo '<td>' . esc_html($arrival['from']) . '</td>';
+            echo '<td>' . esc_html($arrival['etd']) . '</td>';
+            echo '<td>' . esc_html($arrival['eet']) . '</td>';
+            echo '<td>' . esc_html($arrival['eta']) . '</td>';
+            echo '<td>' . esc_html($arrival['last_track']) . '</td>';
+            echo '</tr>';
+        }
+    } else {
+        echo '<tr><td colspan="7">No arrivals</td></tr>';
+    }
     echo '</table></div>';
 
     echo '</div>';
 
     return ob_get_clean(); // Return the buffered content
 }
-add_shortcode('ivao_pilot_tracker', 'render_ivao_pilot_tracker');
+add_shortcode('ivao_airport_tracker', 'render_ivao_pilot_tracker');
 
 // Enqueue the styles.css file
 function ivao_pilot_tracker_enqueue_styles() {
@@ -175,11 +183,74 @@ function ivao_pilot_tracker_enqueue_styles() {
 }
 add_action('wp_enqueue_scripts', 'ivao_pilot_tracker_enqueue_styles');
 
-// Enqueue the refresh.js file
-function ivao_pilot_tracker_enqueue_scripts() {
-    wp_enqueue_script('ivao-pilot-tracker-js', plugins_url('refresh.js', __FILE__), ['jquery'], null, true);
-    wp_localize_script('ivao-pilot-tracker-js', 'ivaoPT', [
-        'ajax_url' => admin_url('admin-ajax.php')
-    ]);
+// Function to add a menu item for the plugin settings
+function ivao_pilot_tracker_menu() {
+    add_menu_page(
+        'IVAO Pilot Tracker Settings',
+        'IVAO Pilot Tracker',
+        'manage_options',
+        'ivao-pilot-tracker',
+        'ivao_pilot_tracker_settings_page',
+        'dashicons-admin-generic'
+    );
 }
-add_action('wp_enqueue_scripts', 'ivao_pilot_tracker_enqueue_scripts');
+add_action('admin_menu', 'ivao_pilot_tracker_menu');
+
+// Function to display the settings page
+function ivao_pilot_tracker_settings_page() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'ivao_airports';
+
+    if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+        if (isset($_POST['delete'])) {
+            $id = intval($_POST['delete']);
+            $wpdb->delete($table_name, ['id' => $id]);
+        } else {
+            $icao_code = sanitize_text_field($_POST['icao_code']);
+            $latitude = floatval($_POST['latitude']);
+            $longitude = floatval($_POST['longitude']);
+            $wpdb->insert($table_name, [
+                'icao_code' => $icao_code,
+                'latitude' => $latitude,
+                'longitude' => $longitude,
+            ]);
+        }
+    }
+
+    $airports = $wpdb->get_results("SELECT * FROM $table_name");
+
+    echo '<div class="wrap">';
+    echo '<h1>IVAO Pilot Tracker Settings</h1>';
+    echo '<h2>Manage Airports</h2>';
+    echo '<form method="POST">';
+    echo '<table class="wp-list-table widefat fixed striped">';
+    echo '<thead><tr><th>ICAO Code</th><th>Latitude</th><th>Longitude</th><th>Action</th></tr></thead>';
+    echo '<tbody>';
+    foreach ($airports as $airport) {
+        echo '<tr>';
+        echo '<td>' . esc_html($airport->icao_code) . '</td>';
+        echo '<td>' . esc_html($airport->latitude) . '</td>';
+        echo '<td>' . esc_html($airport->longitude) . '</td>';
+        echo '<td>';
+        echo '<button type="submit" name="delete" value="' . esc_attr($airport->id) . '" class="button button-secondary">Delete</button>';
+        echo '</td>';
+        echo '</tr>';
+    }
+    echo '</tbody>';
+    echo '</table>';
+    echo '</form>';
+
+    echo '<h2>Add New Airport</h2>';
+    echo '<form method="POST">';
+    echo '<table class="form-table">';
+    echo '<tr><th scope="row"><label for="icao_code">ICAO Code</label></th>';
+    echo '<td><input type="text" name="icao_code" id="icao_code" required></td></tr>';
+    echo '<tr><th scope="row"><label for="latitude">Latitude</label></th>';
+    echo '<td><input type="text" name="latitude" id="latitude" required></td></tr>';
+    echo '<tr><th scope="row"><label for="longitude">Longitude</label></th>';
+    echo '<td><input type="text" name="longitude" id="longitude" required></td></tr>';
+    echo '</table>';
+    echo '<p><input type="submit" class="button button-primary" value="Add Airport"></p>';
+    echo '</form>';
+    echo '</div>';
+}
