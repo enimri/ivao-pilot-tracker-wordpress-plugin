@@ -39,7 +39,7 @@ function calculate_eta($arrivalDistance, $groundSpeed, $lastTrackTimestamp) {
         $etaTimestamp = $currentTime + $etaSeconds;
         $eta = gmdate('H:i', $etaTimestamp) . ' UTC';
     } else {
-        $eta = 'N/A';
+        $eta = '--:--';
     }
     return $eta;
 }
@@ -48,7 +48,7 @@ function calculate_etd($departureTime) {
     if ($departureTime) {
         return gmdate('H:i', $departureTime) . ' UTC';
     }
-    return 'N/A';
+    return '--:--';
 }
 
 function calculate_eet($departureTime, $arrivalTime) {
@@ -58,7 +58,7 @@ function calculate_eet($departureTime, $arrivalTime) {
         $minutes = floor(($eetSeconds % 3600) / 60);
         return sprintf('%02d:%02d', $hours, $minutes) . ' UTC';
     }
-    return 'N/A';
+    return '--:--';
 }
 
 // Function to fetch IVAO data
@@ -87,7 +87,7 @@ function fetch_ivao_data() {
         $lastTrackTimestamp = $pilot['lastTrack']['timestamp'] ?? null;
 
         // Fetch EET directly from API response if available
-        $eet = isset($pilot['flightPlan']['eet']) ? gmdate('H:i', $pilot['flightPlan']['eet']) . ' UTC' : 'N/A';
+        $eet = isset($pilot['flightPlan']['eet']) ? gmdate('H:i', $pilot['flightPlan']['eet']) . ' UTC' : '--:--';
 
         $etd = calculate_etd($departureTime);
         $eta = calculate_eta($arrivalDistance, $groundSpeed, $lastTrackTimestamp);
