@@ -126,7 +126,7 @@ function render_ivao_pilot_tracker() {
 
     ob_start(); // Start output buffering
 
-    echo '<h2>PILOTS</h2>';
+    echo '<h2></h2>';
     echo '<div class="ivao-pilot-tracker">';
 
     // Departures section
